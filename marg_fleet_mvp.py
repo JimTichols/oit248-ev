@@ -51,7 +51,23 @@ for r in route_name:
 
 # import price data 
 
-print route_distance
+file = open("files/prices.csv", "rU")
+csvFile = csv.reader(file)
+
+# Pull out headers
+Header = csvFile.next()
+
+# Make a multidict with all patient information
+hour_price,	summer_weekday,	summer_weekend,	winter_weekday,	winter_weekend = multidict({row[0]: row[1:len(Header)] for row in csvFile})
+
+# Fix data type for Age, Waiting Time, and Life Expectancy, since they are all currently stored as strings (characters)
+for h in hour_price:
+	summer_weekday[h] = float(summer_weekday[h])
+	summer_weekend[h] = float(summer_weekend[h])
+	winter_weekday[h] = float(winter_weekday[h])
+	winter_weekend[h] = float(winter_weekend[h])
+
+print summer_weekend
 
 
 
