@@ -57,10 +57,10 @@ csvFile = csv.reader(file)
 # Pull out headers
 Header = csvFile.next()
 
-# Make a multidict with all patient information
+# Make a multidict with all price information
 hour_price,	summer_weekday,	summer_weekend,	winter_weekday,	winter_weekend = multidict({row[0]: row[1:len(Header)] for row in csvFile})
 
-# Fix data type for Age, Waiting Time, and Life Expectancy, since they are all currently stored as strings (characters)
+# Fix data type for all prices, since they are all currently stored as strings (characters)
 for h in hour_price:
 	summer_weekday[h] = float(summer_weekday[h])
 	summer_weekend[h] = float(summer_weekend[h])
