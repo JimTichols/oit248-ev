@@ -12,17 +12,17 @@ from gurobipy import *
 
 #define model configuration
 
+Number_Buses_K9 = 13
+Max_Charge_kWh = 324
+DischargePerMile_kWh = 2	# Aspirational target
 
+DieselPerGallon = 2.89	# Current price at Shell Palo Alto
+MilesPerGallon = 8	# Optimistic, may go down to 4 to 6 
 
+Max_Depletion = 0.8
 
-
-
-
-
-
-
-
-
+Min_Charging_Power_kW = 24
+Max_Charging_Power_kW = 38.4
 
 
 
