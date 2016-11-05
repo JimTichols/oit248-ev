@@ -62,7 +62,6 @@ hour_price,	summer_weekday,	summer_weekend,	winter_weekday,	winter_weekend = mul
 
 # Fix data type for all prices, since they are all currently stored as strings (characters)
 for h in hour_price:
-	hour_price[h] = float(hour_price[h])
 	summer_weekday[h] = float(summer_weekday[h])
 	summer_weekend[h] = float(summer_weekend[h])
 	winter_weekday[h] = float(winter_weekday[h])
