@@ -24,6 +24,7 @@ max_battery_capacity = 0
 battery_duration = 0
 #roundtrip efficiency for battery
 battery_efficiency = 0
+beginning_state_of_charge = 0
 
 ###---------------------------------- import route data----------------------------------------------
 
@@ -45,6 +46,11 @@ for r in route_name:
 	loops_day[r] = int(loops_day[r])
 	active_evs[r] = int(active_evs[r])
 	
+#power consumption per route per roundtrip, this would be a dictionary of the amount of electricity consumed per trip for each route
+#current value is placeholder, unit is kWh 
+route_power_consumption = {X:1,Y:1,P:1,SE:1,MC:1}
+
+
 ###--------------------------- end of import route data -----------------------------------------------
 
 ###------------------------- import electricity price data --------------------------------------------
