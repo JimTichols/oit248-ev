@@ -79,7 +79,7 @@ csvFile = csv.reader(file)
 Header = csvFile.next()
 
 # Make a multidict with all patient information
-hour_price,	summer_weekday,	summer_weekend,	winter_weekday,	winter_weekend = multidict({row[0]: row[1:len(Header)] for row in csvFile})
+hour_price, summer_weekday, summer_weekend, winter_weekday, winter_weekend = multidict({row[0]: row[1:len(Header)] for row in csvFile})
 
 # Fix data type for Age, Waiting Time, and Life Expectancy, since they are all currently stored as strings (characters)
 for h in hour_price:
@@ -128,6 +128,7 @@ MGModel.update()
 #########################################################################################
 #Section 5 - Build Objective and Set the Objective
 
+#charging cost 
 
 #########################################################################################
 #Section 6 - Add Constraints
