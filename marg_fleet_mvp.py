@@ -10,18 +10,26 @@ from gurobipy import *
 #define model configuration
 #######################################################################################################
 # Section 1 - Data  
+Number_Buses_K9 = 13
+DischargePerMile_kWh = 2	# Aspirational target
+
+DieselPerGallon = 2.89	# Current price at Shell Palo Alto
+MilesPerGallon = 8	# Optimistic, may go down to 4 to 6 
+
+Max_Depletion = 0.8
 
 ###------------------------------charging station data (Tim or Varsh to fill out)---------------------
 #this could be an extension if we have time, ignore for now, assuming one type of charging station, and 
 #assuming the number of charging station is larger than the number of buses
 #cannot charge battery faster than the charging station speed
-max_charing_speed = 0
+Min_Charging_Power_kW = 24
+Max_Charging_Power_kW = 38.4
 
 ###----------------------------------battery characteristics data------------------------------------
 #data for battery capacity and duration, need to be updated, battery capacity in kw, duration in hour
 #this part need to be updated if we are considering multiple bus types with different battery configurations
-max_battery_capacity = 0
-battery_duration = 0
+max_battery_capacity = 324
+
 #roundtrip efficiency for battery
 battery_efficiency = 0
 beginning_state_of_charge = 0
@@ -48,8 +56,17 @@ for r in route_name:
 	
 #power consumption per route per roundtrip, this would be a dictionary of the amount of electricity consumed per trip for each route
 #current value is placeholder, unit is kWh 
-route_power_consumption = {X:1,Y:1,P:1,SE:1,MC:1}
 
+#Varsh: Power consumption (kWh) and diesel consumption (gallons) are on a per hour basis and applicable only during the service hours for each route
+route_power_consumption = {}
+route_diesel_consumption = {}
+
+for r in route_name:
+	route_power_consumption[r] = route_distance[r]*DischargePerMile_kWh/route_hours[r]
+	route_diesel_consumption[r] = route_distance[r]/(route_hours[r]*MilesPerGallon)
+
+#print route_power_consumption
+#print route_diesel_consumption
 
 ###--------------------------- end of import route data -----------------------------------------------
 
@@ -83,7 +100,7 @@ MGModel = Model("Stanford Marguerite Schedule")
 Assign = {}
 
 Time = list(range(0,24))
-Vehicles = ["B1", "B2", "B3", "B4", "B5", "B6", "B7"]
+Vehicles = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10", "B11", "B12", "B13"]
 
 # for n in Vehicles:
 # 	for t in Time:
@@ -118,6 +135,7 @@ MGModel.update()
 ## constraint 2: # of hours it takes to complete each route
 
 ## State-of-charge constraint, cannot over charge the batteries to exceed the maximum capacity of the battery
+	##
 
 ## Cannot be charging if the bus in on a route  
     ##if route_assignment is not 0, charge_or_not = 0 
