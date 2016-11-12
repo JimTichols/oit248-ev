@@ -143,6 +143,7 @@ MGModel.update()
     ##if charge_or_not = 0, charge_rate = 0
     ##if charge_or_not = 1, 0<charge_rate<max_charge_rate
 
+# Maximum number of buses charging at the same time (upper bound is # of charing stations)
 
 #########################################################################################
 # Section 7 - Solve the model! 
