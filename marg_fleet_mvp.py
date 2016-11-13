@@ -148,8 +148,12 @@ MGModel.update()
 
 #########################################################################################
 # Section 7 - Solve the model! 
-# MGModel.optimize()	
-
+# MGModel.optimize()
+###------------------------generate results output in text------------------------------
+#generate a file with objective values and decision variable values
+# MGModel.write("MGM_Solution.sol")
+#generate a file giving objective and constraint equations
+# MGModel.write("MGM_Output.lp")
 
 
 
