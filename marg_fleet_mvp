@@ -1,0 +1,333 @@
+'''
+For OIT248
+Tim Nichols, Varshith Dondapati, Stephanie Scott, Stella Chen
+
+'''
+
+import csv
+from gurobipy import *
+
+
+#define model configuration
+#######################################################################################################
+# Section 1 - Data  
+Number_Buses_K9 = 10
+DischargePerMile_kWh = 2	# Aspirational target
+
+DieselPerGallon = 2.89	# Current price at Shell Palo Alto
+MilesPerGallon = 8	# Optimistic, may go down to 4 to 6 
+
+Max_Depletion = 0.8
+Min_Tank = 1- Max_Depletion
+
+###------------------------------charging station data (Tim or Varsh to fill out)---------------------
+#this could be an extension if we have time, ignore for now, assuming one type of charging station, and 
+#assuming the number of charging station is larger than the number of buses
+#cannot charge battery faster than the charging station speed
+Min_Charging_Power_kW = 24
+Max_Charging_Power_kW = 38.4
+
+###----------------------------------battery characteristics data------------------------------------
+#data for battery capacity and duration, need to be updated, battery capacity in kw, duration in hour
+#this part need to be updated if we are considering multiple bus types with different battery configurations
+max_battery_capacity = 324
+
+#roundtrip efficiency for battery
+battery_efficiency = 0
+beginning_state_of_charge = 324
+
+###---------------------------------- import route data----------------------------------------------
+
+file = open("files/routes.csv", "rU")
+csvFile = csv.reader(file)
+
+# Pull out headers
+Header = csvFile.next()
+
+# Make a multidict with all route information
+route_name, route_distance, route_hours, service_hours, loops_day, active_evs = multidict({row[0]: row[1:len(Header)] for row in csvFile})
+
+# Fix data type for route distance, route hours, service hours, loops per day, and active evs, since they are all currently stored as strings (characters)
+for r in route_name:
+	
+	route_distance[r] = float(route_distance[r])
+	route_hours[r] = float(route_hours[r])
+	service_hours[r] = float(service_hours[r])
+	loops_day[r] = int(loops_day[r])
+	active_evs[r] = int(active_evs[r])
+# 	print r
+# 	print service_hours[r]
+	
+#power consumption per route per roundtrip, this would be a dictionary of the amount of electricity consumed per trip for each route
+#current value is placeholder, unit is kWh 
+
+#Varsh: Power consumption (kWh) and diesel consumption (gallons) are on a per hour basis and applicable only during the service hours for each route
+route_power_consumption = {}
+route_diesel_consumption = {}
+
+for r in route_name:
+	route_power_consumption[r] = route_distance[r]*DischargePerMile_kWh/route_hours[r]
+	route_diesel_consumption[r] = route_distance[r]/(route_hours[r]*MilesPerGallon)
+	
+	route_power_consumption[r] = -route_power_consumption[r]
+
+route_power_consumption["Zero"] = 0
+route_power_consumption["One"] = Min_Charging_Power_kW
+
+# print route_power_consumption
+#print route_diesel_consumption
+
+###--------------------------- end of import route data -----------------------------------------------
+
+###------------------------- import electricity price data --------------------------------------------
+
+file = open("files/prices_solar.csv", "rU")
+csvFile = csv.reader(file)
+
+# Pull out headers
+Header = csvFile.next()
+
+# Make a multidict with all patient information
+hour_price, summer_weekday, summer_weekend, winter_weekday, winter_weekend = multidict({row[0]: row[1:len(Header)] for row in csvFile})
+
+# Fix data type for Age, Waiting Time, and Life Expectancy, since they are all currently stored as strings (characters)
+for h in hour_price:
+	summer_weekday[h] = float(summer_weekday[h])
+	summer_weekend[h] = float(summer_weekend[h])
+	winter_weekday[h] = float(winter_weekday[h])
+	winter_weekend[h] = float(winter_weekend[h])
+
+# Takes strings  
+
+#print summer_weekend
+###--------------------------end of import electricity price data -----------------------
+#########################################################################################
+# Section 2 - Create Model 
+MGModel = Model("Stanford Marguerite Schedule")	
+
+#########################################################################################
+# Section 3 - Create your Decision Variables
+
+Assign = {}
+
+### TIMES are in HOURS ##################################################################
+# timeblock is parametrized - 
+start_time = 6
+timeblock = 1
+end_time = 21
+
+def frange(start, stop, step):
+     i = start
+     while i < stop:
+         yield i
+         i += step
+
+Time = list(frange(start_time,end_time,timeblock))
+# print Time
+
+# Try fewer total busses 
+
+
+Vehicles = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10"]
+# Vehicles = ["B1", "B2", "B3", "B4"]
+
+
+# Bus Assignment options covered in Route include: 
+# Zero == parked, not charging
+# One  == parked & charging
+# route_name = for service routes
+
+Route = [ "Zero", "One"] + route_name
+
+# Note: route_name to call the multi-dict for active routes. Use Route for all states. 
+
+
+### Assign: for each bus choose a Route - Zero (idle), ONE (charging) or route_name (service)
+
+for n in Vehicles:
+	for t in Time:
+		for r in Route:
+			Assign[(n, t, r)] = MGModel.addVar(vtype = GRB.BINARY, name = "Assign_" + n + str(t) +"_" + r) 
+
+Tank = {}
+for n in Vehicles:
+	for t in Time:
+		Tank[(n, t)] = MGModel.addVar(lb = 0, ub = GRB.INFINITY, name = "Tank_" + n + "_" + str(t)) 
+
+Diesel_loops = {}
+for r in route_name:
+	Diesel_loops[r] = MGModel.addVar(lb = 0, ub = GRB.INFINITY, name = "DL_" + r) 	
+
+
+### charge_or_not: for each bus, for each hour, binary decision variable to determine charging (1), or not charging (0)
+
+### charge_rate: for each bus, for each hour, continuous decision variable of rate of charging, bounded by highest charge rate
+ 
+#########################################################################################
+#Section 4 - Update model to include decision variables
+MGModel.update()	
+
+
+#########################################################################################
+#Section 5 - Build Objective and Set the Objective
+
+Alpha = 1
+Beta = 1
+
+#charging cost 
+
+Usage = quicksum( quicksum( quicksum( Assign[n,t,r] for n in Vehicles)for t in Time) for r in route_name) 
+
+# TotalProfitability =
+DieselCost = 0
+for r in route_name: 	
+	DieselCost += route_diesel_consumption[r]*Diesel_loops[r]*DieselPerGallon
+
+# MGModel.setObjective(Usage - TotalProfitability - SocialCost, GRB.MAXIMIZE)
+
+# for r in ["One"]:
+# 	for v in Vehicles:
+# 		for t in Time:  
+# 	 		winter_weekday []
+
+EV_COST = quicksum( quicksum( Assign[n,t,"One"]*winter_weekday[str(t)] for n in Vehicles)for t in Time)
+# EV_COST = 0 
+
+MGModel.setObjective(Usage - Alpha*DieselCost-Beta*EV_COST, GRB.MAXIMIZE)
+
+#########################################################################################
+#Section 6 - Add Constraints
+
+
+## constraint 1: Each bus allowed only one ROUTE at the same time
+
+for v in Vehicles:
+	for t in Time: 
+		MGModel.addConstr( quicksum(Assign[v,t,r] for r in Route) ==  1, name="ONE_ROUTE"+v+str(t))
+
+## constraint 2: # of buses allowed on the same route at the same time
+
+for r in route_name: 
+	for t in Time: 
+		# Max_bus_per_hour = loops_day[r]/(end_time-start_time) 
+		# Max_bus_per_hour = int(loops_day[r]/service_hours[r])+1 
+		
+		# Try RE-formulating with active EVs per hour
+		Max_bus_per_hour = active_evs[r]
+
+		# Added a one to round up 
+		# print r
+		# print Max_bus_per_hour
+		MGModel.addConstr( quicksum(Assign[v,t,r] for v in Vehicles) <=  Max_bus_per_hour, name="MaxBUSperHOUR"+r)
+
+## constraint 2b: # Route SE starts late 
+
+for r in ["SE"]:
+	for v in Vehicles:
+		for t in Time: 
+			SE_start_hour = 15
+			if t <= SE_start_hour:
+				MGModel.addConstr(Assign[v,t,r] == 0, name="Not_Operating"+r+v+str(t))
+
+# Note: can create similar constraint for any other bus with similarly odd hours
+### Would be helpful to have hardcoded start-time and end time for each route_name[r] #####
+		
+## constraint 2B: # of hours it takes to complete each route
+
+for r in route_name:  
+	if route_hours[r] > timeblock:
+		print "Note: Route %s is long and scheduled for consecutve blocks " % (r)
+		Blocks = route_hours[r] / timeblock
+		print "Note: Route %s is long and scheduled for %s consecutve blocks " % (r, Blocks)	
+		for v in Vehicles:
+			
+			for t in [start_time] :
+				MGModel.addConstr(Assign[v,t+timeblock,r] >= Assign[v,t,r], name="LongRoute1"+r+v+str(t))
+				
+				if Blocks >2:
+					MGModel.addConstr(Assign[v,t+timeblock,r] + Assign[v,t+2*timeblock,r] >= 2*Assign[v,t,r], name="LongRoute2"+r+v+str(t))
+				if Blocks >3: 	
+					MGModel.addConstr(Assign[v,t+timeblock,r] + Assign[v,t+2*timeblock,r] + Assign[v,t+3*timeblock,r]>= 3*Assign[v,t,r], name="LongRoute3"+r+v+str(t))
+			
+##### print error message or catch for time steps that are too small STEPHANIE		
+			
+			for t in Time[1:(len(Time)-1)] : 
+				if Blocks >1:
+					MGModel.addConstr(Assign[v,t-timeblock,r] + Assign[v,t+timeblock,r] >= Assign[v,t,r], name="LongRoute2b"+r+v+str(t))
+			
+			for t in [end_time-1]:
+				MGModel.addConstr(Assign[v,t-timeblock,r] >= Assign[v,t,r], name="LongRoute1b"+r+v+str(t))
+					
+
+## CONSTRAINT for Blocks >3. DECIDE if we are using this case	(STEPHAINE)	
+			# for t in Time[2:(len(Time)-2)] :	
+# 				if Blocks >=3:	 
+# 					MGModel.addConstr(Assign[v,t-2*timeblock,r]+Assign[v,t-1*timeblock,r] + Assign[v,t+timeblock,r]+Assign[v,t+2*timeblock,r] >= 2*Assign[v,t,r], name="LongRoute3b"+r+v+str(t))	
+
+
+# Meet demand constraint -----------------------------------------------------------------
+## If route demand is not met by EVs, diesel busses will complete loops to meet demand ### 
+for r in route_name: 
+	MGModel.addConstr(Diesel_loops[r] + quicksum(quicksum(timeblock/route_hours[r]*Assign[v,t,r] for t in Time) for v in Vehicles) >= loops_day[r], name="MeetLoops"+r)
+
+
+## State-of-charge constraint, cannot over charge the batteries to exceed the maximum capacity of the battery
+
+for v in Vehicles:
+	for t in Time:
+		MGModel.addConstr(Tank[v,t] <= 324, name="Max_Tank"+v+str(t))
+		MGModel.addConstr(Tank[v,t] >= Min_Tank*max_battery_capacity, name="Min_Tank"+v+str(t))
+		
+		
+		
+for v in Vehicles:
+	MGModel.addConstr(Tank[v,Time[0]] == beginning_state_of_charge, name="Begin_Tank"+v)
+	for t in Time[1:(len(Time)+1)]:
+		MGModel.addConstr(Tank[v,t-timeblock] + quicksum(route_power_consumption[r]*timeblock*Assign[v,t-timeblock,r] for r in Route) == Tank[v,t], name="Max_Tank"+n+str(t))
+
+
+## Cannot be charging if the bus in on a route  
+
+    ##if route_assignment is not 0, charge_or_not = 0 
+    ##if route_assignment is 0, charge_or_not can be 0 or 1
+    ##if charge_or_not = 0, charge_rate = 0
+    ##if charge_or_not = 1, 0<charge_rate<max_charge_rate  
+
+#########################################################################################
+#STEPHANIE NOTE# I suggest we choose a charge rate to maintain linear constraints 
+
+# Maximum number of buses charging at the same time (upper bound is # of charing stations)
+
+# route_name, route_distance, route_hours, service_hours, loops_day, active_evs
+
+
+
+#########################################################################################
+# Section 7 - Solve the model! 
+MGModel.optimize()	
+for n in Vehicles:
+	for t in Time:
+		for r in Route:
+			if(Assign[(n,t,r)].X == 1):
+				print "BusTimeRoute, %s, %s, %s" % (n, t, r)
+
+for n in Vehicles:
+	for t in Time:
+		for r in Route:
+			if(Assign[(n,t,r)].X == 1):	
+				print "Bustimetank %s, %s, %s" % (n, t, int(Tank[n,t].X))
+
+for r in route_name: 
+	print "Route %s is met with %s Diesel Loops" % (r, int(Diesel_loops[r].X)) 
+
+DieselCost = 0
+for r in route_name: 	
+	DieselCost += route_diesel_consumption[r]*Diesel_loops[r].X*DieselPerGallon 
+print 'Diesel Cost: ' + str(DieselCost)
+
+EV_Cost = 0
+for t in Time:
+	for n in Vehicles:
+		EV_Cost += ( Assign[n,t,"One"].X*winter_weekday[str(t)] )
+
+print 'EV Cost: ' + str(EV_Cost)
