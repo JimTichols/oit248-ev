@@ -10,7 +10,7 @@ from gurobipy import *
 
 #define model configuration
 #######################################################################################################
-# Section 1 - Data  
+# Section 1 - Data 
 Number_Buses_K9 = 10
 DischargePerMile_kWh = 2	# Aspirational target
 
